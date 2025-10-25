@@ -60,12 +60,12 @@ export default function ProfileScreen() {
       {/* Header do Perfil */}
       <View style={styles.profileHeader}>
         <Image
-          source={{ uri: 'https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg?auto=compress&cs=tinysrgb&w=200' }}
-          style={styles.profileImage}
+          source={require('../../assets/images/usuario.png')}
+          style={styles.profileImage} 
         />
         <View style={styles.profileInfo}>
-          <Text style={styles.userName}>João Silva</Text>
-          <Text style={styles.userEmail}>joao.silva@email.com</Text>
+          <Text style={styles.userName}>Iverton Emiquison</Text>
+          <Text style={styles.userEmail}>Iverton@gemail.com</Text>
           <View style={styles.userStats}>
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>47</Text>
@@ -75,11 +75,6 @@ export default function ProfileScreen() {
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>4.8</Text>
               <Text style={styles.statLabel}>Avaliação</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>R$ 1.247</Text>
-              <Text style={styles.statLabel}>Economizado</Text>
             </View>
           </View>
         </View>
@@ -136,7 +131,7 @@ export default function ProfileScreen() {
       </TouchableOpacity>
 
       {/* Versão do App */}
-      <Text style={styles.versionText}>Versão 1.0.0</Text>
+      <Text style={styles.versionText}>Versão 3.1.0</Text>
     </ScrollView>
   );
 }

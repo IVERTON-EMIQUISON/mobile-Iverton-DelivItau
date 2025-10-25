@@ -10,7 +10,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useOrders } from '../hooks/useOrders';
+import { useOrders } from '../../src/hooks/useOrders';
 
 const statusColors = {
   'pending': '#FFA500',

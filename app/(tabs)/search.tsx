@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
   Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useSearchProducts } from '../hooks/useProducts';
+import { useAllProducts } from '../../src/hooks/useProducts';
 
 const categories = ['Todos', 'Hambúrguer', 'Pizza', 'Açaí', 'Doces', 'Bebidas'];
 const sortOptions = ['Relevância', 'Menor Preço', 'Maior Avaliação', 'Tempo de Entrega'];
@@ -20,7 +20,15 @@ export default function SearchScreen() {
   const [selectedCategory, setSelectedCategory] = useState('Todos');
   const [selectedSort, setSelectedSort] = useState('Relevância');
   
-  const { data: products, isLoading } = useSearchProducts(searchQuery, selectedCategory);
+const { data: allProducts, isLoading } = useAllProducts();
+
+  const filteredProducts = useMemo(() => {
+    return allProducts?.filter((product) => {
+      const categoryMatch = selectedCategory === 'Todos' || product.category === selectedCategory;
+      const nameMatch = product.name.toLowerCase().includes(searchQuery.toLowerCase());
+      return categoryMatch && nameMatch;
+    });
+  }, [allProducts, selectedCategory, searchQuery,selectedSort]);
 
   const renderProduct = ({ item }: any) => (
     <TouchableOpacity style={styles.productCard}>
@@ -39,6 +47,42 @@ export default function SearchScreen() {
     </TouchableOpacity>
   );
 
+  const filteredAndSortedProducts = useMemo(() => {
+    // Se a lista da API ainda não chegou, retorna uma lista vazia para evitar erros.
+    if (!allProducts) return [];
+
+    // --- PASSO 1: FILTRAGEM (O que você já tem) ---
+    let filtered = allProducts.filter((product) => {
+      const categoryMatch = selectedCategory === 'Todos' || product.category === selectedCategory;
+      const nameMatch = product.name.toLowerCase().includes(searchQuery.toLowerCase());
+      // Você pode adicionar a busca na descrição aqui se quiser:
+      // const descriptionMatch = product.description.toLowerCase().includes(searchQuery.toLowerCase());
+      // return categoryMatch && (nameMatch || descriptionMatch);
+      return categoryMatch && nameMatch;
+    });
+
+    // --- PASSO 2: ORDENAÇÃO (A parte que faltava) ---
+    // Usamos .slice() para criar uma cópia do array antes de ordenar,
+    // o que é uma boa prática para evitar mutações inesperadas.
+    let sorted = [...filtered]; 
+
+    switch (selectedSort) {
+      case 'Menor Preço':
+        sorted.sort((a, b) => a.price - b.price);
+        break;
+      case 'Maior Avaliação':
+        sorted.sort((a, b) => b.rating - a.rating);
+        break;
+      // O caso 'Tempo de Entrega' não é possível com os dados atuais do produto.
+      // O 'Relevância' é o padrão, então não fazemos nada.
+      default:
+        // Nenhuma ordenação extra, mantém a ordem da API.
+        break;
+    }
+
+    return sorted;
+  }, [allProducts, selectedCategory, searchQuery, selectedSort]); // Adicionamos 'selectedSort' às dependências
+
   return (
     <View style={styles.container}>
       {/* Barra de Busca */}
@@ -54,7 +98,7 @@ export default function SearchScreen() {
           />
         </View>
       </View>
-
+      
       {/* Filtros de Categoria */}
       <View style={styles.filtersContainer}>
         <Text style={styles.filterTitle}>Categorias</Text>
@@ -116,10 +160,12 @@ export default function SearchScreen() {
       {/* Resultados */}
       <View style={styles.resultsContainer}>
         <Text style={styles.resultsTitle}>
-          {products?.length || 0} resultados encontrados
+          {/* 1. Use a nova variável aqui para a contagem */}
+          {filteredAndSortedProducts?.length || 0} resultados encontrados
         </Text>
         <FlatList
-          data={products}
+          // 2. E use a MESMA variável aqui, apenas uma vez
+          data={filteredAndSortedProducts}
           keyExtractor={(item) => item.id}
           renderItem={renderProduct}
           showsVerticalScrollIndicator={false}

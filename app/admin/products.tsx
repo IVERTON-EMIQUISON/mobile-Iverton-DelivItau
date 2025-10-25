@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import {
   View,
@@ -13,20 +12,31 @@ import {
   ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct } from '../hooks/useProducts';
+// 1. Importe os hooks corretos!
+import { useAllProducts, useCreateProduct, useUpdateProduct, useDeleteProduct } from '../../src/hooks/useProducts';
+import { useRestaurants } from '../../src/hooks/useRestaurants'; // 2. Importe o hook para buscar os restaurantes
+import { Picker } from '@react-native-picker/picker'; // 3. Importe o componente Picker
 
 export default function AdminProductsScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any>(null);
+  
+  // 4. Adicione o restaurantId ao estado do formulário
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     price: '',
     category: '',
     image: '',
+    restaurantId: '', // Campo novo e crucial!
   });
 
-  const { data: products, isLoading, refetch } = useProducts();
+  // 5. Use o hook correto para buscar todos os produtos
+  const { data: products, isLoading, refetch } = useAllProducts();
+  
+  // 6. Busque a lista de restaurantes para o nosso seletor
+  const { data: restaurants } = useRestaurants();
+  
   const createProductMutation = useCreateProduct();
   const updateProductMutation = useUpdateProduct();
   const deleteProductMutation = useDeleteProduct();
@@ -42,15 +52,18 @@ export default function AdminProductsScreen() {
         price: product.price.toString(),
         category: product.category,
         image: product.image,
+        restaurantId: product.restaurantId, // Carrega o ID do restaurante ao editar
       });
     } else {
       setEditingProduct(null);
-      setFormData({
+      setFormData({ // Reseta o formulário
         name: '',
         description: '',
         price: '',
         category: categories[0],
         image: '',
+        // Define o primeiro restaurante da lista como padrão, se existir
+        restaurantId: restaurants?.[0]?.id || '', 
       });
     }
     setModalVisible(true);
@@ -65,38 +78,39 @@ export default function AdminProductsScreen() {
       price: '',
       category: '',
       image: '',
+      restaurantId: '',
     });
   };
-
-  const handleSave = async () => {
-    if (!formData.name || !formData.price || !formData.category) {
-      Alert.alert('Erro', 'Preencha todos os campos obrigatórios');
+const handleSave = async () => {
+    // 7. Adicione a validação para o restaurantId
+    if (!formData.name || !formData.price || !formData.category || !formData.restaurantId) {
+      Alert.alert('Erro', 'Preencha todos os campos obrigatórios, incluindo o Restaurante.');
       return;
     }
 
     const productData = {
-      ...formData,
+      name: formData.name,
+      description: formData.description,
       price: parseFloat(formData.price),
+      category: formData.category,
       image: formData.image || 'https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=300',
+      restaurantId: formData.restaurantId, // Garante que o ID está sendo enviado!
     };
 
     try {
       if (editingProduct) {
-        await updateProductMutation.mutateAsync({
-          id: editingProduct.id,
-          ...productData,
-        });
-        Alert.alert('Sucesso', 'Produto atualizado com sucesso!');
+        await updateProductMutation.mutateAsync({ id: editingProduct.id, ...productData });
+        Alert.alert('Sucesso', 'Produto atualizado!');
       } else {
         await createProductMutation.mutateAsync(productData);
-        Alert.alert('Sucesso', 'Produto criado com sucesso!');
+        Alert.alert('Sucesso', 'Produto criado!');
       }
       closeModal();
-      refetch();
+      refetch(); // Atualiza a lista de produtos na tela
     } catch (error) {
-      Alert.alert('Erro', 'Erro ao salvar produto');
+      Alert.alert('Erro', 'Ocorreu um erro ao salvar o produto.');
     }
-  };
+  };// DENTRO DE AdminProductsScreen.tsx
 
   const handleDelete = (product: any) => {
     Alert.alert(
@@ -109,9 +123,8 @@ export default function AdminProductsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await deleteProductMutation.mutateAsync(product.id);
+              await deleteProductMutation.mutateAsync(product); 
               Alert.alert('Sucesso', 'Produto excluído com sucesso!');
-              refetch();
             } catch (error) {
               Alert.alert('Erro', 'Erro ao excluir produto');
             }
@@ -120,7 +133,6 @@ export default function AdminProductsScreen() {
       ]
     );
   };
-
   const renderProduct = ({ item }: any) => (
     <View style={styles.productCard}>
       <Image source={{ uri: item.image }} style={styles.productImage} />
@@ -130,7 +142,7 @@ export default function AdminProductsScreen() {
         <Text style={styles.productDescription} numberOfLines={2}>
           {item.description}
         </Text>
-        <Text style={styles.productPrice}>R$ {item.price.toFixed(2)}</Text>
+        <Text style={styles.productPrice}>R$ {(item.price || 0).toFixed(2)}</Text>
       </View>
       <View style={styles.productActions}>
         <TouchableOpacity
@@ -148,8 +160,8 @@ export default function AdminProductsScreen() {
       </View>
     </View>
   );
-
-  return (
+  
+return (
     <View style={styles.container}>
       {/* Header com botão de adicionar */}
       <View style={styles.header}>
@@ -197,7 +209,33 @@ export default function AdminProductsScreen() {
             </TouchableOpacity>
           </View>
 
+          {/* FORMULÁRIO DO MODAL */}
           <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+            
+            {/* 👇 NOVO CAMPO: Selecionar Restaurante 👇 */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Restaurante *</Text>
+              <View style={styles.pickerContainer}>
+                <Picker
+                  selectedValue={formData.restaurantId}
+                  onValueChange={(itemValue) =>
+                    setFormData({ ...formData, restaurantId: itemValue })
+                  }
+                  style={{ marginVertical: -8 }}
+                >
+                  <Picker.Item label="Selecione um restaurante..." value="" enabled={false} />
+                  {restaurants?.map((restaurant) => (
+                    <Picker.Item
+                      key={restaurant.id}
+                      label={restaurant.name}
+                      value={restaurant.id}
+                    />
+                  ))}
+                </Picker>
+              </View>
+            </View>
+            {/* 👆 FIM DO NOVO CÓDIGO 👆 */}
+
             {/* Nome */}
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Nome *</Text>
@@ -487,5 +525,11 @@ const styles = StyleSheet.create({
     height: 150,
     borderRadius: 8,
     marginTop: 8,
+  },
+  pickerContainer: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    backgroundColor: '#fff',
   },
 });

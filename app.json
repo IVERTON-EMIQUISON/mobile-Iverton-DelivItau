@@ -2,13 +2,13 @@
   "expo": {
     "name": "Delivitau-app",
     "slug": "Delivitau-app",
-    "version": "1.0.0",
+    "version": "3.0.0",
+    "scheme": "delivitau",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -24,7 +24,7 @@
       "package": "com.anonymous.Delivitauapp"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/delivery.png"
     }
   }
 }

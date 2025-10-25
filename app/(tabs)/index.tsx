@@ -1,5 +1,5 @@
+import React, { useState, useMemo } from 'react';
 
-import React from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { useRestaurants } from '../hooks/useRestaurants';
+import { useRestaurants } from '../../src/hooks/useRestaurants';
 
 const { width } = Dimensions.get('window');
 
@@ -28,28 +28,56 @@ const categories = [
 
 export default function HomeScreen() {
   const { data: restaurants, isLoading } = useRestaurants();
+  
+  const [searchText, setSearchText] = useState('');
+  const [showPromotions, setShowPromotions] = useState(false);
+  const [activeCategory, setActiveCategory] = useState('Todos');
+
+  const filteredRestaurants = useMemo(() => {
+    if (!restaurants) return []; // Se não houver dados, retorna lista vazia
+
+    let result = restaurants;
+
+    if (searchText.trim() !== '') {
+      result = result.filter((r) =>
+        r.name.toLowerCase().includes(searchText.toLowerCase())
+      );
+    }
+
+    if (showPromotions) {
+      result = result.filter((r) => r.promotion);
+    }
+
+    if (activeCategory !== 'Todos') {
+      result = result.filter((r) => r.category === activeCategory);
+    }
+
+    return result;
+  }, [restaurants, searchText, showPromotions, activeCategory]); // Recalcula apenas quando um destes mudar
 
   const navigateToRestaurant = (id: string) => {
-    router.push(`/restaurant/${id}`);
+    router.push(`/restaurants/${id}`);
   };
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Banner Promocional */}
+      {/* carousel */}
       <View style={styles.bannerContainer}>
         <LinearGradient
-          colors={['#FF6B35', '#F7931E']}
-          style={styles.banner}
+          colors={['#FF6B35', '#FF8E53']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
+          style={styles.banner}
         >
           <View style={styles.bannerContent}>
             <View style={styles.bannerText}>
-              <Text style={styles.bannerTitle}>Açaí Grátis na Compra de 2</Text>
-              <Text style={styles.bannerSubtitle}>Válido até 19/12/2025</Text>
+              <Text style={styles.bannerTitle}>Bem-vindo ao Deliveresitau!</Text>
+              <Text style={styles.bannerSubtitle}>
+                Encontre os melhores restaurantes na sua região.
+              </Text>
             </View>
             <Image
-              source={{ uri: 'https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=300' }}
+              source={require('../../assets/images/delivery.png')}
               style={styles.bannerImage}
             />
           </View>
@@ -65,6 +93,8 @@ export default function HomeScreen() {
             placeholder="Buscar por restaurante..."
             style={styles.searchInput}
             placeholderTextColor="#999"
+            value={searchText}
+            onChangeText={setSearchText}
           />
           <TouchableOpacity style={styles.promoButton}>
             <Text style={styles.promoText}>Apenas promoções</Text>
@@ -72,12 +102,20 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* Categorias */}
+       {/* Categorias */}
       <View style={styles.categoriesContainer}>
         <Text style={styles.sectionTitle}>Categorias</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoriesScroll}>
           {categories.map((category) => (
-            <TouchableOpacity key={category.id} style={[styles.categoryItem, { backgroundColor: category.color }]}>
+            <TouchableOpacity
+              key={category.id}
+              style={[
+                styles.categoryItem,                                          
+                { backgroundColor: category.color },
+                activeCategory === category.name && styles.categoryItem, // ⚡️ Ativo
+              ]}
+              onPress={() => setActiveCategory(category.name)} // ⚡️ Clique da categoria
+            >
               <Text style={styles.categoryIcon}>{category.icon}</Text>
               <Text style={styles.categoryName}>{category.name}</Text>
             </TouchableOpacity>
@@ -85,11 +123,12 @@ export default function HomeScreen() {
         </ScrollView>
       </View>
 
-      {/* Estabelecimentos */}
+      {/* Estabelecimentos */}  
       <View style={styles.restaurantsContainer}>
         <Text style={styles.sectionTitle}>Estabelecimentos</Text>
         <View style={styles.restaurantsGrid}>
-          {restaurants?.map((restaurant) => (
+          {filteredRestaurants.length > 0 ? (
+            filteredRestaurants.map((restaurant) => (
             <TouchableOpacity
               key={restaurant.id}
               style={styles.restaurantCard}
@@ -115,7 +154,12 @@ export default function HomeScreen() {
                 </View>
               </View>
             </TouchableOpacity>
-          ))}
+         ))
+          ) : (
+            <Text style={{ color: '#777', textAlign: 'center', marginTop: 20 }}>
+              Nenhum restaurante encontrado 😕
+            </Text>
+          )}
         </View>
       </View>
 
