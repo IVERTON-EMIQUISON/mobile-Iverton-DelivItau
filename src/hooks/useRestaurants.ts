@@ -1,90 +1,72 @@
-import { useQuery } from '@tanstack/react-query';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
-// 1. Defina o URL base da sua API em um único lugar.
+// O URL da sua API
 const API_URL = 'https://r3fw3mr1jj.execute-api.us-east-1.amazonaws.com/v1';
 
-/**
- * Busca a lista de TODOS os restaurantes da API.
- */
+// --- FUNÇÕES AUXILIARES DE BUSCA (FETCH) ---
+
+// 1. Busca a lista geral de restaurantes
 const fetchRestaurants = async () => {
-  // Faz a chamada GET para o endpoint /restaurants
   const response = await fetch(`${API_URL}/restaurants`);
-
-  // Se a resposta não for um sucesso (ex: erro 404 ou 500), lança um erro.
-  if (!response.ok) {
-    throw new Error('Falha ao buscar os restaurantes da API');
-  }
-
-  // Converte a resposta JSON em um objeto JavaScript e retorna.
-  const data = await response.json();
-  return data;
+  if (!response.ok) throw new Error('Falha ao buscar restaurantes');
+  return response.json();
 };
 
-/**
- * Busca os detalhes de UM restaurante específico pelo seu ID.
- */
-const fetchRestaurantById = async (id: string) => {
-  // Faz a chamada GET para o endpoint /restaurants/{id}
-  const response = await fetch(`${API_URL}/restaurants/${id}`);
+// 2. Busca os detalhes de UM restaurante E monta o cardápio dele
+const fetchRestaurantWithMenu = async (id: string) => {
+  // A. Busca os dados do restaurante (Nome, Imagem, etc)
+  const restaurantPromise = fetch(`${API_URL}/restaurants/${id}`).then(res => res.json());
+  
+  // B. Busca TODOS os produtos
+  // (Nota: Como sua API Lambda atual não filtra no servidor, filtramos aqui no app)
+  const productsPromise = fetch(`${API_URL}/products`).then(res => res.json());
 
-  if (!response.ok) {
-    throw new Error('Falha ao buscar os detalhes do restaurante');
-  }
+  // C. Espera as duas buscas terminarem
+  const [restaurant, allProducts] = await Promise.all([restaurantPromise, productsPromise]);
 
-  const data = await response.json();
-  return data;
+  // D. A MÁGICA ACONTECE AQUI:
+  // Filtramos a lista de produtos para pegar SÓ os que têm o ID deste restaurante
+  const menu = Array.isArray(allProducts) 
+    ? allProducts.filter((product: any) => product.restaurantId === id)
+    : [];
+
+  // E. Retorna o restaurante já com o cardápio dentro!
+  return {
+    ...restaurant,
+    products: menu 
+  };
 };
 
-/**
- * Hook para obter a lista de todos os restaurantes.
- */
+// --- HOOKS (O QUE VOCÊ USA NAS TELAS) ---
+
+// Hook para a Home (Lista de Restaurantes)
 export const useRestaurants = () => {
   return useQuery({
-    queryKey: ['restaurants'], // Chave única para esta query
+    queryKey: ['restaurants'],
     queryFn: fetchRestaurants,
-    staleTime: 5 * 60 * 1000, // 5 minutos
   });
 };
 
-/**
- * Hook para obter os detalhes de um restaurante específico.
- */
+// Hook para a Tela de Detalhes (Restaurante + Cardápio)
 export const useRestaurant = (id: string) => {
   return useQuery({
-    queryKey: ['restaurant', id],
-    // 4. E aqui, usamos a função que busca por ID.
-    queryFn: () => fetchRestaurantById(id),
-    // A query só será executada se o 'id' não for nulo ou indefinido.
+    queryKey: ['restaurant', id], // Chave única
+    queryFn: () => fetchRestaurantWithMenu(id), // Usa a nossa função nova
     enabled: !!id,
   });
 };
 
-// Função que faz a chamada DELETE
+// --- HOOKS DE MUTATION (Para deletar, se precisar) ---
 const deleteRestaurant = async (id: string) => {
-  const response = await fetch(`${API_URL}/restaurants/${id}`, {
-    method: 'DELETE',
-  });
-
-  if (!response.ok) {
-    throw new Error('Falha ao excluir o restaurante');
-  }
-  // Não precisa retornar JSON, apenas confirmação de sucesso
+  await fetch(`${API_URL}/restaurants/${id}`, { method: 'DELETE' });
 };
 
-// Hook para deletar
 export const useDeleteRestaurant = () => {
   const queryClient = useQueryClient();
-  
   return useMutation({
     mutationFn: deleteRestaurant,
-    // Após o sucesso da exclusão, invalida o cache da lista para forçar o React Query a buscar a lista novamente.
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['restaurants'] });
-      // Opcional: navegar de volta para a lista se estiver na página de detalhes.
     },
-    onError: (error) => {
-        console.error("Erro ao deletar:", error);
-    }
   });
 };

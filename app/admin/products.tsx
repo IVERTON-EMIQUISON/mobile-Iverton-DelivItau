@@ -1,4 +1,7 @@
 import React, { useState } from 'react';
+// Lembre-se de adicionar o 'Stack' nas importações
+import { Stack } from 'expo-router'; 
+// ...
 import {
   View,
   Text,
@@ -12,29 +15,28 @@ import {
   ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-// 1. Importe os hooks corretos!
+import { router } from 'expo-router'; 
 import { useAllProducts, useCreateProduct, useUpdateProduct, useDeleteProduct } from '../../src/hooks/useProducts';
-import { useRestaurants } from '../../src/hooks/useRestaurants'; // 2. Importe o hook para buscar os restaurantes
-import { Picker } from '@react-native-picker/picker'; // 3. Importe o componente Picker
+import { useRestaurants } from '../../src/hooks/useRestaurants';
+import { Picker } from '@react-native-picker/picker';
+// 1. Importe o ImagePicker
+import * as ImagePicker from 'expo-image-picker';
 
 export default function AdminProductsScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any>(null);
   
-  // 4. Adicione o restaurantId ao estado do formulário
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     price: '',
     category: '',
     image: '',
-    restaurantId: '', // Campo novo e crucial!
+    restaurantId: '',
+    estoque: '',
   });
 
-  // 5. Use o hook correto para buscar todos os produtos
   const { data: products, isLoading, refetch } = useAllProducts();
-  
-  // 6. Busque a lista de restaurantes para o nosso seletor
   const { data: restaurants } = useRestaurants();
   
   const createProductMutation = useCreateProduct();
@@ -42,6 +44,24 @@ export default function AdminProductsScreen() {
   const deleteProductMutation = useDeleteProduct();
 
   const categories = ['Hambúrguer', 'Pizza', 'Açaí', 'Doces', 'Bebidas'];
+
+  // 2. Função para escolher imagem da galeria
+  const pickImage = async () => {
+    // Pede permissão e abre a galeria
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.3, // Mantenha baixo (0.3 a 0.5) para não estourar o limite do DynamoDB
+      base64: true, // Importante: converte a imagem para texto
+    });
+
+    if (!result.canceled) {
+      // Cria o texto base64 pronto para usar
+      const imageUri = `data:image/jpeg;base64,${result.assets[0].base64}`;
+      setFormData({ ...formData, image: imageUri });
+    }
+  };
 
   const openModal = (product?: any) => {
     if (product) {
@@ -52,18 +72,19 @@ export default function AdminProductsScreen() {
         price: product.price.toString(),
         category: product.category,
         image: product.image,
-        restaurantId: product.restaurantId, // Carrega o ID do restaurante ao editar
+        restaurantId: product.restaurantId,
+        estoque: product.estoque !== undefined ? product.estoque.toString() : '',
       });
     } else {
       setEditingProduct(null);
-      setFormData({ // Reseta o formulário
+      setFormData({
         name: '',
         description: '',
         price: '',
         category: categories[0],
         image: '',
-        // Define o primeiro restaurante da lista como padrão, se existir
         restaurantId: restaurants?.[0]?.id || '', 
+        estoque: '',
       });
     }
     setModalVisible(true);
@@ -79,22 +100,27 @@ export default function AdminProductsScreen() {
       category: '',
       image: '',
       restaurantId: '',
+      estoque: '',
     });
   };
-const handleSave = async () => {
-    // 7. Adicione a validação para o restaurantId
+
+  const handleSave = async () => {
     if (!formData.name || !formData.price || !formData.category || !formData.restaurantId) {
-      Alert.alert('Erro', 'Preencha todos os campos obrigatórios, incluindo o Restaurante.');
+      Alert.alert('Erro', 'Preencha todos os campos obrigatórios.');
       return;
     }
+
+    // Usa uma imagem padrão se o usuário não escolher nenhuma
+    const defaultImage = 'https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=300';
 
     const productData = {
       name: formData.name,
       description: formData.description,
       price: parseFloat(formData.price),
       category: formData.category,
-      image: formData.image || 'https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=300',
-      restaurantId: formData.restaurantId, // Garante que o ID está sendo enviado!
+      image: formData.image || defaultImage,
+      restaurantId: formData.restaurantId,
+      estoque: parseInt(formData.estoque) || 0,
     };
 
     try {
@@ -106,11 +132,11 @@ const handleSave = async () => {
         Alert.alert('Sucesso', 'Produto criado!');
       }
       closeModal();
-      refetch(); // Atualiza a lista de produtos na tela
+      refetch();
     } catch (error) {
-      Alert.alert('Erro', 'Ocorreu um erro ao salvar o produto.');
+      Alert.alert('Erro', 'Ocorreu um erro ao salvar. A imagem pode ser muito grande.');
     }
-  };// DENTRO DE AdminProductsScreen.tsx
+  };
 
   const handleDelete = (product: any) => {
     Alert.alert(
@@ -125,6 +151,7 @@ const handleSave = async () => {
             try {
               await deleteProductMutation.mutateAsync(product); 
               Alert.alert('Sucesso', 'Produto excluído com sucesso!');
+              refetch();
             } catch (error) {
               Alert.alert('Erro', 'Erro ao excluir produto');
             }
@@ -133,6 +160,7 @@ const handleSave = async () => {
       ]
     );
   };
+
   const renderProduct = ({ item }: any) => (
     <View style={styles.productCard}>
       <Image source={{ uri: item.image }} style={styles.productImage} />
@@ -143,6 +171,9 @@ const handleSave = async () => {
           {item.description}
         </Text>
         <Text style={styles.productPrice}>R$ {(item.price || 0).toFixed(2)}</Text>
+        <Text style={styles.productStock}>
+            Estoque: {item.estoque !== undefined ? item.estoque : 0}
+        </Text>
       </View>
       <View style={styles.productActions}>
         <TouchableOpacity
@@ -161,18 +192,23 @@ const handleSave = async () => {
     </View>
   );
   
-return (
+  return (
     <View style={styles.container}>
-      {/* Header com botão de adicionar */}
+     <Stack.Screen options={{ headerShown: false }} />    
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Produtos ({products?.length || 0})</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 10 }}>
+             <Ionicons name="arrow-back" size={24} color="#333" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Produtos ({products?.length || 0})</Text>
+        </View>
+
         <TouchableOpacity style={styles.addButton} onPress={() => openModal()}>
           <Ionicons name="add" size={24} color="#fff" />
-          <Text style={styles.addButtonText}>Novo Produto</Text>
+          <Text style={styles.addButtonText}>Novo</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Lista de Produtos */}
       <FlatList
         data={products}
         keyExtractor={(item) => item.id}
@@ -190,7 +226,6 @@ return (
         )}
       />
 
-      {/* Modal de Cadastro/Edição */}
       <Modal
         visible={modalVisible}
         animationType="slide"
@@ -209,10 +244,8 @@ return (
             </TouchableOpacity>
           </View>
 
-          {/* FORMULÁRIO DO MODAL */}
           <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
             
-            {/* 👇 NOVO CAMPO: Selecionar Restaurante 👇 */}
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Restaurante *</Text>
               <View style={styles.pickerContainer}>
@@ -234,9 +267,7 @@ return (
                 </Picker>
               </View>
             </View>
-            {/* 👆 FIM DO NOVO CÓDIGO 👆 */}
 
-            {/* Nome */}
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Nome *</Text>
               <TextInput
@@ -247,7 +278,6 @@ return (
               />
             </View>
 
-            {/* Descrição */}
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Descrição</Text>
               <TextInput
@@ -260,7 +290,6 @@ return (
               />
             </View>
 
-            {/* Preço */}
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Preço *</Text>
               <TextInput
@@ -272,7 +301,17 @@ return (
               />
             </View>
 
-            {/* Categoria */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Quantidade em Estoque</Text>
+              <TextInput
+                style={styles.textInput}
+                value={formData.estoque}
+                onChangeText={(text) => setFormData({ ...formData, estoque: text })}
+                placeholder="0"
+                keyboardType="numeric"
+              />
+            </View>
+
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Categoria *</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -300,19 +339,29 @@ return (
               </ScrollView>
             </View>
 
-            {/* URL da Imagem */}
+            {/* 3. NOVO CAMPO DE IMAGEM (BOTÃO) */}
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>URL da Imagem</Text>
+              <Text style={styles.inputLabel}>Imagem do Produto</Text>
+              
+              <TouchableOpacity style={styles.imagePickerButton} onPress={pickImage}>
+                <Ionicons name="image-outline" size={24} color="#666" />
+                <Text style={styles.imagePickerText}>Escolher da Galeria</Text>
+              </TouchableOpacity>
+
+              {/* Se já tiver imagem escolhida ou colada, mostra aqui */}
+              {formData.image ? (
+                <Image source={{ uri: formData.image }} style={styles.previewImage} />
+              ) : null}
+              
+              {/* Campo de texto opcional se ainda quiser colar link */}
               <TextInput
-                style={styles.textInput}
+                style={[styles.textInput, { marginTop: 10, fontSize: 12, color: '#999' }]}
                 value={formData.image}
                 onChangeText={(text) => setFormData({ ...formData, image: text })}
-                placeholder="https://exemplo.com/imagem.jpg"
+                placeholder="Ou cole uma URL aqui..."
               />
-              {formData.image && (
-                <Image source={{ uri: formData.image }} style={styles.previewImage} />
-              )}
             </View>
+
           </ScrollView>
         </View>
       </Modal>
@@ -324,6 +373,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f8f9fa',
+    paddingTop: 40, 
   },
   header: {
     flexDirection: 'row',
@@ -346,7 +396,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FF6B35',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12, 
     paddingVertical: 8,
     borderRadius: 20,
   },
@@ -403,6 +453,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#4CAF50',
   },
+  productStock: {
+    fontSize: 14,
+    color: '#555',
+    marginTop: 4,
+    fontWeight: '500',
+  },
   productActions: {
     flexDirection: 'row',
     position: 'absolute',
@@ -450,6 +506,7 @@ const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
     backgroundColor: '#fff',
+    paddingTop: 40,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -531,5 +588,22 @@ const styles = StyleSheet.create({
     borderColor: '#ddd',
     borderRadius: 8,
     backgroundColor: '#fff',
+  },
+  // 4. Estilo do novo botão
+  imagePickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f0f0f0',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderStyle: 'dashed',
+  },
+  imagePickerText: {
+    marginLeft: 8,
+    color: '#666',
+    fontWeight: '500',
   },
 });

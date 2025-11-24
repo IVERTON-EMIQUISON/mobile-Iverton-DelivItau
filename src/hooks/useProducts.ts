@@ -5,8 +5,6 @@ import { useAuth } from '../context/AuthContext';
 const API_URL = 'https://r3fw3mr1jj.execute-api.us-east-1.amazonaws.com/v1';
 
 
-
-
 /**
  * Busca a lista de produtos de um restaurante específico.
  * Chama: GET /products?restaurantId={id}
@@ -49,10 +47,13 @@ const createProduct = async (productData: any, adminKey: string | null) => {
  * Atualiza um produto existente.
  * Chama: PUT /products/{id}
  */
-const updateProduct = async ({ id, ...productData }: any) => {
+const updateProduct = async ({ id, adminKey, ...productData }: any) => {
   const response = await fetch(`${API_URL}/products/${id}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${adminKey}`
+    },
     body: JSON.stringify(productData),
   });
 
@@ -66,15 +67,18 @@ const updateProduct = async ({ id, ...productData }: any) => {
  * Deleta um produto.
  * Chama: DELETE /products/{id}
  */
-const deleteProduct = async (id: string) => {
+const deleteProduct = async ({ id, adminKey }: any) => {
   const response = await fetch(`${API_URL}/products/${id}`, {
     method: 'DELETE',
+    headers: { 
+      'Authorization': `Bearer ${adminKey}`
+    }
   });
 
   if (!response.ok) {
     throw new Error('Falha ao deletar o produto');
   }
-  return response.json();
+  return true;
 };
 
 /**
@@ -131,15 +135,17 @@ export const useCreateProduct = () => {
 
 export const useUpdateProduct = () => {
   const queryClient = useQueryClient();
-  
+  const { adminKey } = useAuth();
+
   return useMutation({
-    mutationFn: updateProduct,
+    mutationFn: ({ id, ...productData }: any) =>
+      updateProduct({ id, adminKey, ...productData }),
+
     onSuccess: (data, variables) => {
-      // 'variables' tem o ID do produto, 'data' tem o produto atualizado
       const restaurantId = data?.restaurantId || variables?.restaurantId;
 
       queryClient.invalidateQueries({ queryKey: ['products', 'all'] });
-      
+
       if (restaurantId) {
         queryClient.invalidateQueries({ queryKey: ['restaurant', restaurantId] });
       }
@@ -152,16 +158,17 @@ export const useUpdateProduct = () => {
 // para que possamos saber qual restaurantId invalidar.
 export const useDeleteProduct = () => {
   const queryClient = useQueryClient();
-  
-  // A função de mutação agora espera o objeto do produto
+  const { adminKey } = useAuth();
+
   return useMutation({
-    mutationFn: (product: any) => deleteProduct(product.id), // A API só precisa do ID
+    mutationFn: (product: any) =>
+      deleteProduct({ id: product.id, adminKey }),
+
     onSuccess: (data, product) => {
-      // 'product' é o objeto que passamos para a mutação
       const restaurantId = product.restaurantId;
 
       queryClient.invalidateQueries({ queryKey: ['products', 'all'] });
-      
+
       if (restaurantId) {
         queryClient.invalidateQueries({ queryKey: ['restaurant', restaurantId] });
       }
@@ -205,4 +212,3 @@ export const useAllProducts = () => {
     queryFn: fetchAllProducts,
   });
 };
-

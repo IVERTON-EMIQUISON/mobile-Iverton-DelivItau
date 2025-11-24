@@ -1,58 +1,104 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Alert } from 'react-native';
 
-// 1. Defina o URL base da sua API.
 const API_URL = 'https://r3fw3mr1jj.execute-api.us-east-1.amazonaws.com/v1';
+
+// -----------------------------
+// 🔥 BUSCAR PEDIDOS
+// -----------------------------
 const fetchOrders = async () => {
-  // Faz a chamada GET para o endpoint /orders
-  const response = await fetch(`${API_URL}/orders`);
-
-  if (!response.ok) {
-    throw new Error('Falha ao buscar os pedidos da API');
+  try {
+    const response = await fetch(`${API_URL}/orders`);
+    if (!response.ok) {
+      if (response.status === 404) return [];
+      throw new Error('Erro ao buscar pedidos');
+    }
+    return response.json();
+  } catch (error) {
+    return [];
   }
-
-  const data = await response.json();
-  return data;
 };
 
-/**
- * Busca os detalhes de UM pedido específico pelo seu ID.
- */
-const fetchOrderById = async (id: string) => {
-  // Faz a chamada GET para o endpoint /orders/{id}
-  const response = await fetch(`${API_URL}/orders/${id}`);
-
-  if (!response.ok) {
-    throw new Error('Falha ao buscar os detalhes do pedido');
-  }
-
-  const data = await response.json();
-  return data;
-};
-
-// --- HOOKS ATUALIZADOS QUE USAM AS FUNÇÕES REAIS ---
-
-/**
- * Hook para obter a lista de todos os pedidos do usuário.
- */
 export const useOrders = () => {
   return useQuery({
     queryKey: ['orders'],
-    // 3. Usamos nossa nova função que chama a API de verdade.
     queryFn: fetchOrders,
-    staleTime: 2 * 60 * 1000, // 2 minutos
-    refetchInterval: 30 * 1000, // Continua atualizando a cada 30 segundos
+    refetchInterval: 5000,
   });
 };
 
-/**
- * Hook para obter os detalhes de um pedido específico.
- */
-export const useOrder = (id: string) => {
-  return useQuery({
-    queryKey: ['order', id],
-    // 4. E aqui, usamos a função que busca por ID.
-    queryFn: () => fetchOrderById(id),
-    // A query só será executada se o 'id' existir.
-    enabled: !!id,
+// -----------------------------
+// 🔥 CRIAR PEDIDO (POST)
+// -----------------------------
+const createOrder = async (newOrder: any) => {
+  
+  // AQUI ESTÁ A MUDANÇA: Não reformatamos mais.
+  // Confiamos que o orders.tsx já mandou o JSON pronto com restaurantId.
+  console.log("🚀 ENVIANDO PARA AWS:\n", JSON.stringify(newOrder, null, 2));
+
+  const response = await fetch(`${API_URL}/orders`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ivertondelive' // Sua senha correta
+    },
+    body: JSON.stringify(newOrder),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("❌ ERRO AWS:", response.status, errorText);
+    throw new Error(errorText);
+  }
+  
+  return response.json();
+};
+
+// -----------------------------
+// 🔥 HOOK
+// -----------------------------
+export const useCreateOrder = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: createOrder,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      Alert.alert("Sucesso!", "Pedido enviado para a cozinha!");
+    },
+    onError: (error: any) => {
+      Alert.alert("Erro", "Falha ao enviar: " + error.message);
+    }
+  });
+};
+const cancelOrder = async (orderId: string) => {
+  const response = await fetch(`${API_URL}/orders/${orderId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ivertondelive' // Sua senha
+    },
+    body: JSON.stringify({ status: 'cancelled' }),
+  });
+
+  if (!response.ok) {
+    throw new Error('Erro ao cancelar pedido');
+  }
+  return response.json();
+};
+
+export const useCancelOrder = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: cancelOrder,
+    onSuccess: () => {
+      // Atualiza a lista na hora para mostrar "Cancelado"
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      Alert.alert("Cancelado", "O pedido foi cancelado com sucesso.");
+    },
+    onError: () => {
+      Alert.alert("Erro", "Não foi possível cancelar o pedido.");
+    }
   });
 };
